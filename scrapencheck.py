@@ -1,7 +1,15 @@
 import csv
-import requests
-from bs4 import BeautifulSoup
-import re
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+
+# Sti til ChromeDriver (endre denne til hvor du har plassert chromedriver)
+chrome_driver_path = "/Users/mortenendresen/kode/RealEstateEmailCollectorAndChecker/chromedriver-mac-x64/chromedriver"
+
+# Konfigurer Selenium for å bruke Chrome
+service = Service(executable_path=chrome_driver_path)
+driver = webdriver.Chrome(service=service)
 
 # Steg 1: Importer URLer fra CSV
 def importer_urls(filbane):
@@ -14,25 +22,24 @@ def importer_urls(filbane):
                 urls.append(row[0])  # Kolonne A er på indeks 0
     return urls
 
-# Steg 2: Scrape email fra nettsidene
+# Steg 2: Scrape email fra nettsidene ved hjelp av Selenium
 def scrape_email_from_url(url):
     try:
-        response = requests.get(url)
-        soup = BeautifulSoup(response.content, 'html.parser')
+        # Åpne nettsiden
+        driver.get(url)
 
-        # Eksempel for scraping ved bruk av class="css-bbyz0x"
-        email_element = soup.find('span', class_='css-bbyz0x')
+        # Vent litt for å sikre at dynamisk innhold lastes
+        time.sleep(5)  # Juster tiden etter behov
+
+        # Forsøk å finne e-postadressen basert på class
+        email_element = driver.find_element(By.CLASS_NAME, "css-bbyz0x")
         if email_element:
             email = email_element.text
+            print(f"Fant e-post på {url}: {email}")
             return email
         else:
-            # Fallback: Søker etter emails via regex som dekker de fleste email-formater
-            email_regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-            emails = re.findall(email_regex, soup.get_text())
-            if emails:
-                return emails[0]  # Returner første funn
-            else:
-                return None
+            print(f"Ingen e-postadresse funnet på {url}")
+            return None
     except Exception as e:
         print(f"Feil ved scraping av {url}: {e}")
         return None
@@ -63,13 +70,16 @@ def lag_ny_liste(urls, sendte_emailer, output_filbane):
                 writer.writerow({'URL': url, 'Email': 'Ingen funnet', 'Sendt?': 'Nei'})
 
 # Filstier for input og output
-url_fil = '/Users/mortenendresen/Documents/Thylo/sjekker program/vibbomails.csv'
-sendt_email_fil = '/Users/mortenendresen/Documents/Thylo/sjekker program/sendte_email.csv'
-output_fil = '/Users/mortenendresen/Documents/Thylo/sjekker program/nye_borettslag.csv'
+url_fil = '/Users/mortenendresen/kode/RealEstateEmailCollectorAndChecker/newleads.csv'
+sendt_email_fil = '/Users/mortenendresen/kode/RealEstateEmailCollectorAndChecker/hovedleads.csv'
+output_fil = '/Users/mortenendresen/kode/RealEstateEmailCollectorAndChecker/ubrukteleads.csv'
 
 # Kjør programmet
 urls = importer_urls(url_fil)
 sendte_emailer = les_sendte_emailer(sendt_email_fil)
 lag_ny_liste(urls, sendte_emailer, output_fil)
+
+# Lukk nettleseren når programmet er ferdig
+driver.quit()
 
 print("Prosessen er fullført, sjekk den nye CSV-filen for resultatene.")
